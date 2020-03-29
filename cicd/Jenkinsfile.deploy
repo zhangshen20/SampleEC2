@@ -1,0 +1,72 @@
+#!/usr/bin/env groovy
+
+pipeline {
+
+    agent {
+        label 'lambda-package-python3-debian-buster'
+    }
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        ansiColor('xterm')
+    }
+
+    parameters {
+        choice(name: 'ENVIRONMENT', description: 'Choose an environment to build the stack(s)', choices: 'dev\nstg\nprd')
+    }
+
+    environment {
+        AWS_CREDENTIALS = "dh-${params.ENVIRONMENT}"
+        PROJECT_NAME    = "dh-tipping-best-bet"
+        NAMESPACE       = "dh-tipping-best-bet-${params.ENVIRONMENT}"
+        AWS_DEFAULT_REGION = "ap-southeast-2"
+    }
+
+    stages {
+
+        stage('Initialise') {
+            when {
+                expression {
+                    if (!(env.BRANCH_NAME == 'master' || params.ENVIRONMENT == 'dev')) {
+                        echo "Higher than DEV environment can only run from master branch.."
+                        return false
+                    } else {
+                        return true
+                    }
+                }
+            }
+            steps {
+                script {
+                    currentBuild.displayName = "#${env.BUILD_NUMBER} - (${params.ENVIRONMENT})"
+                    currentBuild.description = "Build #${env.BUILD_NUMBER} - Deploying to ${params.ENVIRONMENT}"
+                    sh 'make clean; make venv'
+                }
+            }
+        }
+        stage('Build') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'dh-dev']]) {
+                    sh "make build-all ENVIRONMENT=${params.ENVIRONMENT}"
+                }
+            }
+        }
+        stage('Package') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'dh-dev']]) {
+                    sh "make package-all ENVIRONMENT=${params.ENVIRONMENT}"
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: env.AWS_CREDENTIALS]]) {
+                    sh "make deploy-all ENVIRONMENT=${params.ENVIRONMENT}"
+                }
+            }
+        }
+
+
+    }
+
+}

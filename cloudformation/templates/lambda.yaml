@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Best Bet Tipping
+
+Parameters:
+  StackPrefix:
+    Type: String
+    Description: Stack Suffix
+
+  StackSuffix:
+    Type: String
+    Description: Stack Suffix
+
+  SumoCWLogsLambdaVersion:
+    Description: Lambda for the cloudwatch logs subscription
+    Type: String
+    Default: 1
+
+  ParamLoggingDebugLevel:
+    Description: Debugging level flag for logging
+    Type: String
+    Default: 1
+
+  AccountID:
+    Description: Debugging level flag for logging
+    Type: String
+    # Default: 336422632114
+
+  BucketNameL0:
+    Description: L0 Bucket Name
+    Type: String
+    # Default: dl-best-bets-tippings-dev-l0-lsmsljk7uyv8
+
+  BucketNameL1:
+    Description: L1 Bucket Name
+    Type: String
+    # Default: dl-best-bets-tippings-dev-l1-lsmsljk7uyv8    
+
+Globals:
+
+  Function:
+    Runtime: python3.6
+
+Resources:
+  BestBetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./lambda/
+      Environment:
+        Variables:
+          DEBUG: !Ref ParamLoggingDebugLevel
+      Handler: best_bet.lambda_handler
+      Policies:
+        - AWSLambdaExecute
+        - Version: '2012-10-17'
+          Statement:
+              - Effect: Allow
+                Action: 
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:List*
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub arn:aws:s3:::${BucketNameL0}
+                  - !Sub arn:aws:s3:::${BucketNameL0}/*
+                  - !Sub arn:aws:s3:::${BucketNameL1}
+                  - !Sub arn:aws:s3:::${BucketNameL1}/*                  
+              - Effect: Allow
+                Action:
+                  - ssm:PutParameter
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                Resource:
+                  - !Sub arn:aws:ssm:*:${AccountID}:parameter/*
+
+      Timeout: 900
+      MemorySize: 1024
+
+  BestBetFunctionCloudwatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${BestBetFunction}'
+      RetentionInDays: 7
+
+Outputs:
+  BestBetFunction:
+    Description: "Best Bet function name"
+    Export:
+      Name: !Sub ${AWS::StackName}::BestBetFunction
+    Value: !Ref BestBetFunction
